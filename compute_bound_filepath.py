@@ -28,23 +28,8 @@ def evaluate(model, features, labels, mask):
         return correct.item() * 1.0 / len(labels)
 
 def degree_bucketing(graph, args, degree_emb=None, max_degree = 10):
-    #G = nx.DiGraph(graph)
-    #embed()
     max_degree = args.n_hidden
     features = torch.ones([graph.number_of_nodes(), max_degree])
-    return features
-    # embed()
-    for i in range(graph.number_of_nodes()):
-        #print(i)
-
-        try:
-            features[i][min(graph.in_degree(i), max_degree-1)] = 1
-            # features[i, :] = degree_emb[min(graph.degree(i), max_degree-1), :]
-        except:
-            features[i][0] = 1
-            #features[i, :] = degree_emb[0, :]
-    # embed()
-    #embed()
     return features
 
 def createTraining(labels, valid_mask = None, train_ratio=0.8):
@@ -54,8 +39,6 @@ def createTraining(labels, valid_mask = None, train_ratio=0.8):
     num_train = int(labels.shape[0] * train_ratio)
     all_node_index = list(range(labels.shape[0]))
     np.random.shuffle(all_node_index)
-    #for i in range(len(idx) * train_ratio):
-    # embed()
     train_mask[all_node_index[:num_train]] = 1
     test_mask[all_node_index[:num_train]] = 0
     if valid_mask is not None:
@@ -80,16 +63,12 @@ def read_struct_net(file_path):
     
 def constructDGL(graph):
     node_mapping = defaultdict(int)
-    #relabels = []
+
     for node in sorted(list(graph.nodes())):
         node_mapping[node] = len(node_mapping)
-    #    relabels.append(labels[node])
-    # embed()
-    #assert len(node_mapping) == len(labels)
     new_g = DGLGraph()
     new_g.add_nodes(len(node_mapping))
-    #for i in range(len(node_mapping)):
-    #    new_g.add_edge(i, i)
+
     for edge in graph.edges():
         if not new_g.has_edge_between(node_mapping[edge[0]], node_mapping[edge[1]]):
             new_g.add_edge(node_mapping[edge[0]], node_mapping[edge[1]])
@@ -105,28 +84,28 @@ def output_adj(graph):
     for id_a, id_b in zip(a.numpy().tolist(), b.numpy().tolist()):
         A[id_a, id_b] = 1
     return A
-# find the max eval
+
 def compute_term(l, r):
     n = l.shape[0]
-    eval = eigh(l-r, eigvals_only=True)
+    eval_ = eigh((l-r).T @ (l-r), eigvals_only=True)
+    return np.sqrt(max(eval_))
     
-    return max(max(eval), -min(eval))
-
-# def compute_term(l, r):
-#     return norm(l-r)
-
-# dump the best run
 def main(args):
-    # load and preprocess dataset
 
-    def constructSubG(g):
-
+    def constructSubG(file_path):
+        g = read_struct_net(file_path)
+        if True:
+            g.remove_edges_from(nx.selfloop_edges(g))
+        g = constructDGL(g)
         g.readonly()
+        # n_edges = g.number_of_edges()
+
         node_sampler = dgl.contrib.sampling.NeighborSampler(g, 1, 10,  # 0,
                                                                 neighbor_type='in', num_workers=1,
                                                                 add_self_loop=False,
                                                                 num_hops=args.n_layers + 1, shuffle=True)
-        return node_sampler
+        return g, node_sampler
+
 
     def constructHopdic(ego_g):
         hop_dic = dict()
@@ -187,6 +166,13 @@ def main(args):
 
         return A
     
+    # def degPermute(ego_g, hop_dic):
+    #     perm_hop_dic = hop_dic
+    #     for layer_id in range(1, n_layers+2)[::-1]:
+    #         s, arg_degree_sort = torch.sort(-ego_g.layer_in_degree(layer_id))
+    #         print(arg_degree_sort)
+    #         perm_hop_dic[layer_id] = torch.tensor(hop_dic[layer_id])[arg_degree_sort].tolist()
+    #     return perm_hop_dic
 
     def degPermute(ego_g, hop_dic, layer_id):
         if layer_id == 0:
@@ -238,44 +224,26 @@ def main(args):
 
         return lL, rL
         
-    # print(args.file_path, args.label_path)
-    Lg = pickle.load(open(args.file_path, 'rb'))
-    Rg = pickle.load(open(args.label_path, 'rb'))
-
-    print(len(Lg['graphs']))
-    bound_ave = []
-    
-    for i in range(1):
-        Lgi = Lg['graphs'][39]
-        bound_ave_i = []
-        for j in tqdm(range(1, len(Rg['graphs']))):
-        # for j in range(1,2):
-            Rgj = Rg['graphs'][j]
-            Lego_list = constructSubG(Lgi)
-            Rego_list = constructSubG(Rgj)
+    print(args.file_path, args.label_path)
+    Lg, Lego_list = constructSubG(args.file_path)
+    Rg, Rego_list = constructSubG(args.label_path)
+    print(Lg)
+    # embed()
+    bound = 0
+    cntl = 0
+    cntr = 0
+    for lego_g in tqdm(Lego_list):
+        cntl += 1
+        cntr = 0
+        for rego_g in Rego_list:
+            cntr += 1
+            # print(cntr)
+            lL, rL = pad_nbhd(Lg, Rg, lego_g, rego_g, 
+                                perm_type='shuffle',
+                                neighbor_type='in')
+            bound += compute_term(lL, rL)
             
-            # embed()
-            bound = 0
-            cntl = 0
-            cntr = 0
-            for lego_g in Lego_list:
-                cntl += 1
-                cntr = 0
-                for rego_g in Rego_list:
-                    cntr += 1
-                    lL, rL = pad_nbhd(Lgi, Rgj, lego_g, rego_g, 
-                                        perm_type='degree',
-                                        neighbor_type='in')
-                    bound += compute_term(lL, rL)
-
-            bound_ave_i += [bound / (cntl * cntr)]
-
-        print(sum(bound_ave_i)/len(bound_ave_i))
-        bound_ave += bound_ave_i
-
-    print(sum(bound_ave)/len(bound_ave))
-    # embed()      
-        # embed()
+    print(bound / (cntl * cntr))
 
 
 if __name__ == '__main__':
@@ -322,6 +290,6 @@ if __name__ == '__main__':
 
     parser.set_defaults(self_loop=False)
     args = parser.parse_args()
-    print(args)
+    # print(args)
     
     main(args)
