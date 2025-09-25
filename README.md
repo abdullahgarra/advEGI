@@ -20,7 +20,5 @@ Adversarial edge edits + EGI experiments.
 - Degree/centrality carries a big chunk of the signal on these benchmarks (especially Brazil).
 - The usual “pick the closest source by structure (ΔD)” **isn’t always a safe bet** here.
 
-**Why the pictures?**  
-Left: how EGI thinks—compare distributions of local ego-graphs across domains.  
-Right: classic image adversarial example—tiny changes can flip a prediction; adversarial training tries to make models ignore such noise.
+
 
