@@ -11,7 +11,7 @@ Adversarial edge edits + EGI experiments.
  This is a small research codebase exploring whether tiny edge edits (adversarial, PGD-style “score-and-flip”) help Ego-Graph Infomax (EGI) transfer across graphs on the classic airport-role benchmarks.
 
 **What we looked at:**
-- Train EGI as usual vs. EGI with light adversarial edge edits.
+- Train EGI (https://github.com/GentleZhu/EGI) as usual vs. EGI with light adversarial edge edits.
 - Check if simple degree/centrality explains most of the performance.
 - Try different source graphs (original Europe, degree-preserving shuffle, random) and see what actually transfers best.
 
